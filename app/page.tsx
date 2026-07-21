@@ -20,6 +20,10 @@ interface Car {
 
 const BUCKET_NAME = 'cars_project'; // Using the gallery bucket for car images
 
+const generateFileName = (userId: string, fileExt: string | undefined) => {
+  return `${userId}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+};
+
 export default function Home() {
   const [name, setName] = useState('')
   const [color, setColor] = useState('')
@@ -101,7 +105,7 @@ export default function Home() {
       if (selectedFile) {
         const fileExt = selectedFile.name.split('.').pop();
         const userId = user ? user.uid : 'guest';
-        const fileName = `${userId}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+        const fileName = generateFileName(userId, fileExt);
         const { error: uploadError } = await supabase.storage
           .from(BUCKET_NAME)
           .upload(fileName, selectedFile);

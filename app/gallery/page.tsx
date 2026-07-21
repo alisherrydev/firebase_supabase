@@ -8,6 +8,10 @@ import { collection, addDoc, onSnapshot, serverTimestamp, doc, deleteDoc } from 
 
 const BUCKET_NAME = 'gallary_project';
 
+const generateFileName = (userId: string, fileExt: string | undefined) => {
+  return `${userId}_${Date.now().toString(36)}.${fileExt}`;
+};
+
 interface UploadedImage {
   id: string;
   name: string;
@@ -76,7 +80,7 @@ export default function GalleryPage() {
       for (const file of selectedFiles) {
         const fileExt = file.name.split('.').pop();
         const userId = user ? user.uid : 'guest';
-        const fileName = `${userId}_${Date.now().toString(36)}.${fileExt}`;
+        const fileName = generateFileName(userId, fileExt);
 
         const { error } = await supabase.storage.from(BUCKET_NAME).upload(fileName, file);
         if (error) throw error;
