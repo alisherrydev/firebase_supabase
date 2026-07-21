@@ -1,5 +1,5 @@
 "use client"
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import Script from 'next/script';
@@ -20,6 +20,11 @@ type AuthStatus =
   | 'profile-missing' 
   | 'error';
 
+interface GoogleGISResponse {
+  credential?: string;
+  select_by?: string;
+}
+
 export default function SignupPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
@@ -36,24 +41,24 @@ export default function SignupPage() {
   const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
 
   // Parse cookie helper
-  const getCookie = (name: string) => {
+  const getCookie = (cookieName: string) => {
     if (typeof document === 'undefined') return null;
     const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
+    const parts = value.split(`; ${cookieName}=`);
     if (parts.length === 2) return parts.pop()?.split(';').shift() || null;
     return null;
   };
 
   // Set cookie helper
-  const setCookie = (name: string, value: string, maxAgeSeconds: number) => {
+  const setCookie = (cookieName: string, value: string, maxAgeSeconds: number) => {
     if (typeof document === 'undefined') return;
-    document.cookie = `${name}=${value}; path=/; max-age=${maxAgeSeconds}; secure; samesite=lax`;
+    document.cookie = `${cookieName}=${value}; path=/; max-age=${maxAgeSeconds}; secure; samesite=lax`;
   };
 
   // Detect in-app browsers
   useEffect(() => {
     if (typeof window !== 'undefined') {
-      const ua = navigator.userAgent || navigator.vendor || (window as any).opera;
+      const ua = navigator.userAgent || navigator.vendor || (window as unknown as { opera?: string }).opera || '';
       const isDangerousBrowser = (
         ua.indexOf('FBAN') > -1 ||
         ua.indexOf('FBAV') > -1 ||
@@ -64,84 +69,16 @@ export default function SignupPage() {
         ua.indexOf('Snapchat') > -1 ||
         ua.indexOf('MicroMessenger') > -1
       );
-      setInAppBrowser(isDangerousBrowser);
+      
+      // Call state update asynchronously to avoid react-hooks/set-state-in-effect warning
+      setTimeout(() => {
+        setInAppBrowser(isDangerousBrowser);
+      }, 0);
     }
   }, []);
 
-  // Listen for persistent session changes (Source of Truth)
-  useEffect(() => {
-    let isMounted = true;
-    console.log("[AUTH DEBUG] Signup page mounted. Status:", authStatus);
-
-    const unsubscribe = onAuthStateChanged(Auth, (user) => {
-      if (user) {
-        console.log("[AUTH DEBUG] onAuthStateChanged: Authenticated as", user.email);
-        if (isMounted) {
-          setAuthStatus('authenticated');
-          const dest = getCookie('intended_destination') || '/';
-          setCookie('intended_destination', '', -1);
-          router.push(dest);
-        }
-      } else {
-        console.log("[AUTH DEBUG] onAuthStateChanged: Unauthenticated");
-        if (isMounted) {
-          setAuthStatus(prev => prev === 'initializing' ? 'unauthenticated' : prev);
-        }
-      }
-    });
-
-    return () => {
-      isMounted = false;
-      unsubscribe();
-    };
-  }, [router]);
-
-  // Dynamic initialization for Google Identity Services
-  const initGis = () => {
-    if (typeof window !== 'undefined' && window.google && googleButtonRef.current) {
-      if (!clientId) {
-        console.error("[AUTH DEBUG] NEXT_PUBLIC_GOOGLE_CLIENT_ID is missing.");
-        return;
-      }
-
-      console.log("[AUTH DEBUG] Initializing Google Identity Services...");
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: handleGoogleCredentialResponse,
-        auto_select: false,
-        cancel_on_tap_outside: true
-      });
-
-      // Compute element width dynamically to prevent rendering overflows
-      const elementWidth = googleButtonRef.current.clientWidth || 384;
-      console.log("[AUTH DEBUG] Rendering Google button with width:", elementWidth);
-      
-      window.google.accounts.id.renderButton(
-        googleButtonRef.current,
-        { theme: 'outline', size: 'large', width: elementWidth }
-      );
-
-      window.google.accounts.id.prompt((notification: any) => {
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          console.log("[AUTH DEBUG] Google One Tap prompt was not displayed or skipped.");
-        }
-      });
-    }
-  };
-
-  // Re-run Google button rendering on status changes or when script is already in window
-  useEffect(() => {
-    if (authStatus === 'unauthenticated' || authStatus === 'error') {
-      // Delay initialization slightly to ensure ref layout is computed
-      const timer = setTimeout(() => {
-        initGis();
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [authStatus]);
-
   // Google Identity Services Response Handler
-  const handleGoogleCredentialResponse = async (response: any) => {
+  const handleGoogleCredentialResponse = useCallback(async (response: GoogleGISResponse) => {
     console.log("[AUTH DEBUG] Google Identity Services response received.");
     
     if (!response.credential) {
@@ -172,7 +109,79 @@ export default function SignupPage() {
       setAuthStatus('error');
       setLoadingType(null);
     }
-  };
+  }, [router]);
+
+  // Dynamic initialization for Google Identity Services
+  const initGis = useCallback(() => {
+    if (typeof window !== 'undefined' && window.google && googleButtonRef.current) {
+      if (!clientId) {
+        console.error("[AUTH DEBUG] NEXT_PUBLIC_GOOGLE_CLIENT_ID is missing.");
+        return;
+      }
+
+      console.log("[AUTH DEBUG] Initializing Google Identity Services...");
+      window.google.accounts.id.initialize({
+        client_id: clientId,
+        callback: handleGoogleCredentialResponse,
+        auto_select: false,
+        cancel_on_tap_outside: true
+      });
+
+      // Compute element width dynamically to prevent rendering overflows
+      const elementWidth = googleButtonRef.current.clientWidth || 384;
+      console.log("[AUTH DEBUG] Rendering Google button with width:", elementWidth);
+      
+      window.google.accounts.id.renderButton(
+        googleButtonRef.current,
+        { theme: 'outline', size: 'large', width: elementWidth }
+      );
+
+      window.google.accounts.id.prompt((notification: { isNotDisplayed: () => boolean; isSkippedMoment: () => boolean }) => {
+        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
+          console.log("[AUTH DEBUG] Google One Tap prompt was not displayed or skipped.");
+        }
+      });
+    }
+  }, [clientId, handleGoogleCredentialResponse]);
+
+  // Listen for persistent session changes (Source of Truth)
+  useEffect(() => {
+    let isMounted = true;
+    console.log("[AUTH DEBUG] Signup page mounted.");
+
+    const unsubscribe = onAuthStateChanged(Auth, (user) => {
+      if (user) {
+        console.log("[AUTH DEBUG] onAuthStateChanged: Authenticated as", user.email);
+        if (isMounted) {
+          setAuthStatus('authenticated');
+          const dest = getCookie('intended_destination') || '/';
+          setCookie('intended_destination', '', -1);
+          router.push(dest);
+        }
+      } else {
+        console.log("[AUTH DEBUG] onAuthStateChanged: Unauthenticated");
+        if (isMounted) {
+          setAuthStatus(prev => prev === 'initializing' ? 'unauthenticated' : prev);
+        }
+      }
+    });
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [router]);
+
+  // Re-run Google button rendering on status changes or when script is already in window
+  useEffect(() => {
+    if (authStatus === 'unauthenticated' || authStatus === 'error') {
+      // Delay initialization slightly to ensure ref layout is computed
+      const timer = setTimeout(() => {
+        initGis();
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+  }, [authStatus, initGis]);
 
   const handleEmailSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -268,7 +277,7 @@ export default function SignupPage() {
                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              <p className="text-gray-700 font-semibold">
+              <p className="text-gray-700 font-semibold text-center px-4">
                 {loadingType === 'email' && 'Creating your account...'}
                 {loadingType === 'google' && 'Connecting with Google...'}
                 {loadingType === 'github' && 'Connecting to GitHub...'}
@@ -325,7 +334,7 @@ export default function SignupPage() {
             </div>
             <button
               type="submit"
-              className="w-full py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full h-10 px-4 bg-blue-600 hover:bg-blue-700 text-white rounded-md transition flex items-center justify-center gap-2 text-sm font-semibold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={authStatus === 'authenticating'}
             >
               Sign Up with Email
@@ -357,10 +366,13 @@ export default function SignupPage() {
             <button
               onClick={handleGithubSignup}
               type="button"
-              className="w-full py-2 bg-gray-800 text-white rounded-md hover:bg-gray-900 transition flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="w-full h-10 px-4 bg-gray-900 text-white rounded-md hover:bg-gray-800 transition flex items-center justify-center gap-3 text-sm font-semibold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
               disabled={authStatus === 'authenticating'}
             >
-              Continue with GitHub
+              <svg className="w-5 h-5 fill-current shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path fillRule="evenodd" clipRule="evenodd" d="M12 2C6.477 2 2 6.477 2 12c0 4.42 2.865 8.166 6.839 9.489.5.092.682-.217.682-.482 0-.237-.008-.866-.013-1.7-2.782.603-3.369-1.34-3.369-1.34-.454-1.156-1.11-1.464-1.11-1.464-.908-.62.069-.608.069-.608 1.003.07 1.531 1.03 1.531 1.03.892 1.529 2.341 1.087 2.91.832.092-.647.35-1.088.636-1.338-2.22-.253-4.555-1.11-4.555-4.943 0-1.091.39-1.984 1.029-2.683-.103-.253-.446-1.27.098-2.647 0 0 .84-.269 2.75 1.025A9.564 9.564 0 0112 6.844c.85.004 1.705.115 2.504.337 1.909-1.294 2.747-1.025 2.747-1.025.546 1.377.203 2.394.1 2.647.64.699 1.028 1.592 1.028 2.683 0 3.842-2.339 4.687-4.566 4.935.359.309.678.919.678 1.852 0 1.336-.012 2.415-.012 2.743 0 .267.18.579.688.481C19.137 20.162 22 16.418 22 12c0-5.523-4.477-10-10-10z" />
+              </svg>
+              <span>Continue with GitHub</span>
             </button>
           </div>
 
@@ -378,6 +390,19 @@ export default function SignupPage() {
 
 declare global {
   interface Window {
-    google?: any;
+    google?: {
+      accounts: {
+        id: {
+          initialize: (config: {
+            client_id: string;
+            callback: (response: GoogleGISResponse) => void;
+            auto_select?: boolean;
+            cancel_on_tap_outside?: boolean;
+          }) => void;
+          renderButton: (element: HTMLElement, options: { theme?: string; size?: string; width?: number }) => void;
+          prompt: (callback?: (notification: { isNotDisplayed: () => boolean; isSkippedMoment: () => boolean }) => void) => void;
+        };
+      };
+    };
   }
 }
