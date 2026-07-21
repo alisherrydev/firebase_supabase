@@ -21,4 +21,4 @@ const googleAuthProvider = new GoogleAuthProvider();
 const Auth = getAuth(app);
 const githubAuthProvider = new GithubAuthProvider();
 
-export { db, googleAuthProvider, githubAuthProvider, Auth };
+export { db, googleAuthProvider, githubAuthProvider, Auth, analytics };

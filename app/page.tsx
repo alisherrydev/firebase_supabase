@@ -1,11 +1,22 @@
+/* eslint-disable @next/next/no-img-element */
 "use client"
 import { useEffect, useState } from "react";
 import React from "react";
 import { addDoc, collection, onSnapshot, serverTimestamp, doc, updateDoc, deleteDoc, getDoc } from "firebase/firestore"
 import { db, Auth } from "@/lib/firebase.config";
-import { onAuthStateChanged, User, signOut } from "firebase/auth";
-import Link from "next/link";
+import { onAuthStateChanged, User } from "firebase/auth";
 import { createClient } from "@/utils/supabase/client";
+
+interface Car {
+  id: string;
+  name?: string;
+  color?: string;
+  price?: string;
+  imageUrl?: string;
+  addedBy?: string;
+  addedById?: string;
+  [key: string]: unknown;
+}
 
 const BUCKET_NAME = 'cars_project'; // Using the gallery bucket for car images
 
@@ -20,11 +31,11 @@ export default function Home() {
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const supabase = createClient();
 
-  const [cars, setCars] = useState<any[]>([])
+  const [cars, setCars] = useState<Car[]>([])
   const [loadingCars, setLoadingCars] = useState(true)
   const [carsError, setCarsError] = useState<string | null>(null)
 
-  const [selectedCar, setSelectedCar] = useState<any>(null)
+  const [selectedCar, setSelectedCar] = useState<Car | null>(null)
   const [user, setUser] = useState<User | null>(null);
 
   useEffect(() => {
@@ -114,9 +125,10 @@ export default function Home() {
       setColor('');
       setPrice('');
       cancelFileSelection();
-    } catch (error: any) {
+    } catch (error: unknown) {
       console.error("Error adding item:", error);
-      setSaveError(error.message || "Failed to add item.");
+      const errorMsg = error instanceof Error ? error.message : "Failed to add item.";
+      setSaveError(errorMsg);
     } finally {
       setIsSaving(false);
     }

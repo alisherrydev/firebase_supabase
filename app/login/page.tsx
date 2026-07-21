@@ -3,8 +3,8 @@ import React from 'react';
 import Link from 'next/link';
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Auth, googleAuthProvider } from '@/lib/firebase.config';
-import { signInWithEmailAndPassword, GoogleAuthProvider } from 'firebase/auth';
+import { Auth } from '@/lib/firebase.config';
+import { signInWithEmailAndPassword } from 'firebase/auth';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -19,8 +19,9 @@ export default function LoginPage() {
       const userCredential = await signInWithEmailAndPassword(Auth, email, password);
       console.log("User signed in successfully", userCredential.user);
       router.push('/');
-    } catch (err: any) {
-      console.error('Error signing in:', err.message);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Error signing in:', errorMsg);
       setError('Invalid email or password. Please try again.');
     }
   };
@@ -65,7 +66,7 @@ export default function LoginPage() {
         </form>
         <div className="mt-4 text-center text-sm space-y-2 flex flex-col">
           <Link href="/signup" className="text-blue-600 hover:underline">
-            Don't have an account? Sign up
+            Don&apos;t have an account? Sign up
           </Link>
           <Link href="/" className="text-gray-500 hover:underline">
             Back to Home

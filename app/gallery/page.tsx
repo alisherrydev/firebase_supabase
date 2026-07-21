@@ -1,6 +1,5 @@
 "use client"
 import React, { useState, useEffect } from 'react';
-import Link from 'next/link';
 import { createClient } from '@/utils/supabase/client';
 
 import { db, Auth } from '@/lib/firebase.config';
@@ -77,7 +76,7 @@ export default function GalleryPage() {
       for (const file of selectedFiles) {
         const fileExt = file.name.split('.').pop();
         const userId = user ? user.uid : 'guest';
-        const fileName = `${userId}_${Math.random().toString(36).substring(2, 15)}.${fileExt}`;
+        const fileName = `${userId}_${Date.now().toString(36)}.${fileExt}`;
 
         const { error } = await supabase.storage.from(BUCKET_NAME).upload(fileName, file);
         if (error) throw error;
@@ -99,9 +98,10 @@ export default function GalleryPage() {
       setSelectedFiles([]);
       previewUrls.forEach(url => URL.revokeObjectURL(url));
       setPreviewUrls([]);
-    } catch (err: any) {
-      console.error('Error uploading image:', err.message);
-      setError(err.message || 'Failed to upload image.');
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to upload image.';
+      console.error('Error uploading image:', errorMsg);
+      setError(errorMsg);
     } finally {
       setIsUploading(false);
     }
@@ -128,9 +128,10 @@ export default function GalleryPage() {
 
       // Delete from Firestore
       await deleteDoc(doc(db, 'gallery', img.id));
-    } catch (err: any) {
-      console.error('Error deleting image:', err.message);
-      setError(err.message || 'Failed to delete image.');
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to delete image.';
+      console.error('Error deleting image:', errorMsg);
+      setError(errorMsg);
     }
   };
 

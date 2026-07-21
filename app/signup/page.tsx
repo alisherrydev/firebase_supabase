@@ -26,9 +26,10 @@ export default function SignupPage() {
         displayName: name
       });
       console.log("User signed up successfully", userCredential.user);
-    } catch (err: any) {
-      console.error('Error signing up:', err.message);
-      setError(err.message);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Error signing up:', errorMsg);
+      setError(errorMsg);
     }
   };
 
@@ -38,9 +39,10 @@ export default function SignupPage() {
       const result = await signInWithPopup(Auth, googleAuthProvider);
       console.log("Google signup success", result.user);
       setOauthUser(result.user);
-    } catch (err: any) {
-      console.error('Error with Google signup:', err.message);
-      setError(err.message);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Error with Google signup:', errorMsg);
+      setError(errorMsg);
     }
   };
 
@@ -50,9 +52,10 @@ export default function SignupPage() {
       const result = await signInWithPopup(Auth, githubAuthProvider);
       console.log("Github signup success", result.user);
       setOauthUser(result.user);
-    } catch (err: any) {
-      console.error('Error with Github signup:', err.message);
-      setError(err.message);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Error with Github signup:', errorMsg);
+      setError(errorMsg);
     }
   };
 
@@ -66,9 +69,10 @@ export default function SignupPage() {
       setTimeout(() => {
         router.push('/');
       }, 2000);
-    } catch (err: any) {
-      console.error('Error setting password:', err.message);
-      setError(err.message);
+    } catch (err: unknown) {
+      const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+      console.error('Error setting password:', errorMsg);
+      setError(errorMsg);
     }
   };
 
