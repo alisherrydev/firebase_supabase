@@ -1,15 +1,14 @@
 "use client"
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import Script from 'next/script';
 import { Auth } from '@/lib/firebase.config';
 import { 
   createUserWithEmailAndPassword, 
   updateProfile,
   onAuthStateChanged,
   GoogleAuthProvider,
-  signInWithCredential
+  signInWithPopup
 } from 'firebase/auth';
 
 type AuthStatus = 
@@ -20,10 +19,7 @@ type AuthStatus =
   | 'profile-missing' 
   | 'error';
 
-interface GoogleGISResponse {
-  credential?: string;
-  select_by?: string;
-}
+
 
 export default function SignupPage() {
   const [name, setName] = useState('');
@@ -37,8 +33,7 @@ export default function SignupPage() {
   const [inAppBrowser, setInAppBrowser] = useState(false);
 
   const router = useRouter();
-  const googleButtonRef = useRef<HTMLDivElement>(null);
-  const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID;
+
 
   // Parse cookie helper
   const getCookie = (cookieName: string) => {
@@ -77,72 +72,31 @@ export default function SignupPage() {
     }
   }, []);
 
-  // Google Identity Services Response Handler
-  const handleGoogleCredentialResponse = useCallback(async (response: GoogleGISResponse) => {
-    console.log("[AUTH DEBUG] Google Identity Services response received.");
-    
-    if (!response.credential) {
-      console.error("[AUTH DEBUG] Google GIS response missing credential.");
-      setError("Google authentication failed to return a credential.");
-      setAuthStatus('error');
-      return;
-    }
-
+  // Google Sign-In with Popup Handler
+  const handleGoogleSignup = useCallback(async () => {
+    console.log("[AUTH DEBUG] Google Sign-In popup initiated.");
+    setError(null);
     setAuthStatus('authenticating');
     setLoadingType('google');
-    setError(null);
 
     try {
-      console.log("[AUTH DEBUG] Exchanging Google ID Token for Firebase Session...");
-      const googleCredential = GoogleAuthProvider.credential(response.credential);
-      const result = await signInWithCredential(Auth, googleCredential);
+      const provider = new GoogleAuthProvider();
+      provider.setCustomParameters({ prompt: 'select_account' });
+      const result = await signInWithPopup(Auth, provider);
       
-      console.log("[AUTH DEBUG] Firebase session created successfully via GIS:", result.user.email);
+      console.log("[AUTH DEBUG] Firebase session created successfully via Google Popup:", result.user.email);
       setAuthStatus('authenticated');
       const dest = getCookie('intended_destination') || '/';
       setCookie('intended_destination', '', -1);
       router.push(dest);
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-      console.error('[AUTH DEBUG] Error exchanging Google credential in Firebase:', errorMsg);
+      console.error('[AUTH DEBUG] Error in Google Popup Sign-In:', errorMsg);
       setError(`Google Sign-In failed: ${errorMsg}`);
       setAuthStatus('error');
       setLoadingType(null);
     }
   }, [router]);
-
-  // Dynamic initialization for Google Identity Services
-  const initGis = useCallback(() => {
-    if (typeof window !== 'undefined' && window.google && googleButtonRef.current) {
-      if (!clientId) {
-        console.error("[AUTH DEBUG] NEXT_PUBLIC_GOOGLE_CLIENT_ID is missing.");
-        return;
-      }
-
-      console.log("[AUTH DEBUG] Initializing Google Identity Services...");
-      window.google.accounts.id.initialize({
-        client_id: clientId,
-        callback: handleGoogleCredentialResponse,
-        auto_select: false,
-        cancel_on_tap_outside: true
-      });
-
-      // Compute element width dynamically to prevent rendering overflows
-      const elementWidth = googleButtonRef.current.clientWidth || 384;
-      console.log("[AUTH DEBUG] Rendering Google button with width:", elementWidth);
-      
-      window.google.accounts.id.renderButton(
-        googleButtonRef.current,
-        { theme: 'outline', size: 'large', width: elementWidth }
-      );
-
-      window.google.accounts.id.prompt((notification: { isNotDisplayed: () => boolean; isSkippedMoment: () => boolean }) => {
-        if (notification.isNotDisplayed() || notification.isSkippedMoment()) {
-          console.log("[AUTH DEBUG] Google One Tap prompt was not displayed or skipped.");
-        }
-      });
-    }
-  }, [clientId, handleGoogleCredentialResponse]);
 
   // Listen for persistent session changes (Source of Truth)
   useEffect(() => {
@@ -172,16 +126,7 @@ export default function SignupPage() {
     };
   }, [router]);
 
-  // Re-run Google button rendering on status changes or when script is already in window
-  useEffect(() => {
-    if (authStatus === 'unauthenticated' || authStatus === 'error') {
-      // Delay initialization slightly to ensure ref layout is computed
-      const timer = setTimeout(() => {
-        initGis();
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-  }, [authStatus, initGis]);
+
 
   const handleEmailSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -256,11 +201,7 @@ export default function SignupPage() {
 
   return (
     <>
-      <Script 
-        src="https://accounts.google.com/gsi/client" 
-        strategy="afterInteractive"
-        onLoad={initGis}
-      />
+
       
       <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
         {inAppBrowser && (
@@ -348,20 +289,17 @@ export default function SignupPage() {
           </div>
 
           <div className="mt-6 space-y-3 flex flex-col items-center">
-            {/* Google Identity Services Button Container */}
-            {clientId ? (
-              <div 
-                ref={googleButtonRef} 
-                className="w-full flex justify-center mb-1" 
-                style={{ minHeight: '40px' }}
-              >
-                {/* Google Button renders here */}
-              </div>
-            ) : (
-              <div className="w-full p-3 bg-yellow-50 text-yellow-700 text-xs rounded border border-yellow-200 text-center mb-2">
-                NEXT_PUBLIC_GOOGLE_CLIENT_ID is missing. Google Auth disabled.
-              </div>
-            )}
+            <button
+              onClick={handleGoogleSignup}
+              type="button"
+              className="w-full h-10 px-4 bg-white text-gray-700 border border-gray-300 rounded-md hover:bg-gray-50 transition flex items-center justify-center gap-3 text-sm font-semibold shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+              disabled={authStatus === 'authenticating'}
+            >
+              <svg className="w-5 h-5 shrink-0" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                <path fill="#EA4335" d="M12.24 10.285V14.4h6.887c-.648 2.41-2.519 4.114-5.136 4.114-3.41 0-6.19-2.78-6.19-6.19s2.78-6.19 6.19-6.19c1.54 0 2.94.57 4.03 1.5l3.05-3.05C18.99 1.91 15.86 1 12.24 1 6.03 1 1 6.03 1 12.24s5.03 11.24 11.24 11.24c6.31 0 11.74-4.5 11.74-11.24 0-.76-.08-1.52-.22-2.24H12.24z"/>
+              </svg>
+              <span>Continue with Google</span>
+            </button>
 
             <button
               onClick={handleGithubSignup}
@@ -388,21 +326,4 @@ export default function SignupPage() {
   );
 }
 
-declare global {
-  interface Window {
-    google?: {
-      accounts: {
-        id: {
-          initialize: (config: {
-            client_id: string;
-            callback: (response: GoogleGISResponse) => void;
-            auto_select?: boolean;
-            cancel_on_tap_outside?: boolean;
-          }) => void;
-          renderButton: (element: HTMLElement, options: { theme?: string; size?: string; width?: number }) => void;
-          prompt: (callback?: (notification: { isNotDisplayed: () => boolean; isSkippedMoment: () => boolean }) => void) => void;
-        };
-      };
-    };
-  }
-}
+
