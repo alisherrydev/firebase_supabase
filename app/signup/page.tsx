@@ -3,7 +3,8 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Auth, googleAuthProvider, githubAuthProvider } from '@/lib/firebase.config';
-import { createUserWithEmailAndPassword, signInWithPopup, updateProfile, updatePassword, User } from 'firebase/auth';
+import { createUserWithEmailAndPassword, signInWithPopup, signInWithRedirect, getRedirectResult, updateProfile, updatePassword, User } from 'firebase/auth';
+import { useEffect } from 'react';
 
 export default function SignupPage() {
   const [name, setName] = useState('');
@@ -15,6 +16,23 @@ export default function SignupPage() {
   const [oauthUser, setOauthUser] = useState<User | null>(null);
   const [oauthPassword, setOauthPassword] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState(false);
+
+  useEffect(() => {
+    const checkRedirectResult = async () => {
+      try {
+        const result = await getRedirectResult(Auth);
+        if (result && result.user) {
+          console.log("Redirect signup success", result.user);
+          setOauthUser(result.user);
+        }
+      } catch (err: unknown) {
+        const errorMsg = err instanceof Error ? err.message : 'Unknown error';
+        console.error('Error with redirect signup:', errorMsg);
+        setError(errorMsg);
+      }
+    };
+    checkRedirectResult();
+  }, []);
 
   const handleEmailSignup = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -36,9 +54,13 @@ export default function SignupPage() {
   const handleGoogleSignup = async () => {
     setError(null);
     try {
-      const result = await signInWithPopup(Auth, googleAuthProvider);
-      console.log("Google signup success", result.user);
-      setOauthUser(result.user);
+      if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+        await signInWithRedirect(Auth, googleAuthProvider);
+      } else {
+        const result = await signInWithPopup(Auth, googleAuthProvider);
+        console.log("Google signup success", result.user);
+        setOauthUser(result.user);
+      }
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'Unknown error';
       console.error('Error with Google signup:', errorMsg);
@@ -49,9 +71,13 @@ export default function SignupPage() {
   const handleGithubSignup = async () => {
     setError(null);
     try {
-      const result = await signInWithPopup(Auth, githubAuthProvider);
-      console.log("Github signup success", result.user);
-      setOauthUser(result.user);
+      if (typeof window !== 'undefined' && window.innerWidth <= 768) {
+        await signInWithRedirect(Auth, githubAuthProvider);
+      } else {
+        const result = await signInWithPopup(Auth, githubAuthProvider);
+        console.log("Github signup success", result.user);
+        setOauthUser(result.user);
+      }
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'Unknown error';
       console.error('Error with Github signup:', errorMsg);
