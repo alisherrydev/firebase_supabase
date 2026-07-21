@@ -134,7 +134,7 @@ export default function Home() {
     }
   }
 
-  const handleDeleteCar = async (id: string, addedById: string) => {
+  const handleDeleteCar = async (id: string, addedById?: string) => {
     if (!user || user.uid !== addedById) {
       alert("You are not authorized to delete this car.");
       return;
@@ -146,7 +146,7 @@ export default function Home() {
     }
   };
 
-  const handleEditCar = async (id: string, addedById: string) => {
+  const handleEditCar = async (id: string, addedById?: string) => {
     if (!user || user.uid !== addedById) {
       alert("You are not authorized to edit this car.");
       return;
