@@ -3,7 +3,14 @@ import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { Auth, googleAuthProvider, githubAuthProvider } from '@/lib/firebase.config';
-import { createUserWithEmailAndPassword, signInWithPopup, signInWithRedirect, getRedirectResult, updateProfile } from 'firebase/auth';
+import { 
+  createUserWithEmailAndPassword, 
+  signInWithPopup, 
+  signInWithRedirect, 
+  getRedirectResult, 
+  updateProfile,
+  onAuthStateChanged
+} from 'firebase/auth';
 
 export default function SignupPage() {
   const [name, setName] = useState('');
@@ -12,6 +19,7 @@ export default function SignupPage() {
   const [error, setError] = useState<string | null>(null);
 
   // Loading states
+  const [isInitializing, setIsInitializing] = useState(true);
   const [isEmailLoading, setIsEmailLoading] = useState(false);
   const [isGoogleLoading, setIsGoogleLoading] = useState(false);
   const [isGithubLoading, setIsGithubLoading] = useState(false);
@@ -19,26 +27,53 @@ export default function SignupPage() {
   const router = useRouter();
 
   useEffect(() => {
+    let isMounted = true;
+    console.log("[AUTH DEBUG] Signup page mounted. Initializing Auth listeners...");
+
+    // 1. Listen for global authentication state changes.
+    // This is robust against React Strict Mode unmounting, as Firebase will
+    // eventually resolve the auth state from IndexedDB regardless of the component lifecycle.
+    const unsubscribe = onAuthStateChanged(Auth, (user) => {
+      if (user) {
+        console.log("[AUTH DEBUG] onAuthStateChanged fired: User is authenticated", user.email);
+        if (isMounted) {
+          router.push('/');
+        }
+      } else {
+        console.log("[AUTH DEBUG] onAuthStateChanged fired: User is NOT authenticated");
+        // We do NOT set isInitializing to false here yet, because we need to check getRedirectResult first.
+      }
+    });
+
+    // 2. Check for redirect results
     const checkRedirectResult = async () => {
-      console.log("[AUTH DEBUG] checkRedirectResult mounted.");
-      // We must handle loading state for returning users from redirect
-      // Even though we can't show a specific provider loading state easily, 
-      // we can at least log and handle the result.
       try {
+        console.log("[AUTH DEBUG] Calling getRedirectResult...");
         const result = await getRedirectResult(Auth);
         if (result && result.user) {
-          console.log("[AUTH DEBUG] Redirect result received successfully: ", result.user.email);
-          router.push('/');
+          console.log("[AUTH DEBUG] getRedirectResult success: ", result.user.email);
+          if (isMounted) router.push('/');
         } else {
-          console.log("[AUTH DEBUG] No redirect result found.");
+          console.log("[AUTH DEBUG] getRedirectResult returned null (no redirect state found).");
         }
       } catch (err: unknown) {
         const errorMsg = err instanceof Error ? err.message : 'Unknown error';
-        console.error('[AUTH DEBUG] Error with redirect signup:', errorMsg);
-        setError(`Authentication failed: ${errorMsg}`);
+        console.error('[AUTH DEBUG] Error in getRedirectResult:', errorMsg);
+        if (isMounted) setError(`Authentication redirect failed: ${errorMsg}`);
+      } finally {
+        if (isMounted) {
+          console.log("[AUTH DEBUG] Initialization complete. Revealing UI.");
+          setIsInitializing(false);
+        }
       }
     };
+
     checkRedirectResult();
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
   }, [router]);
 
   const handleEmailSignup = async (e: React.FormEvent) => {
@@ -54,12 +89,12 @@ export default function SignupPage() {
         displayName: name
       });
       console.log("[AUTH DEBUG] User signed up successfully", userCredential.user.email);
+      // We rely on onAuthStateChanged to handle the redirect, but we can also push directly for speed.
       router.push('/');
     } catch (err: unknown) {
       const errorMsg = err instanceof Error ? err.message : 'Unknown error';
       console.error('[AUTH DEBUG] Error signing up:', errorMsg);
       setError(errorMsg);
-    } finally {
       setIsEmailLoading(false);
     }
   };
@@ -74,7 +109,7 @@ export default function SignupPage() {
       
       if (isMobile) {
         console.log("[AUTH DEBUG] Calling Firebase signInWithRedirect (Google)...");
-        // We do not set loading to false here because the page will navigate away.
+        // Do not set loading to false here, page will navigate away
         await signInWithRedirect(Auth, googleAuthProvider);
       } else {
         console.log("[AUTH DEBUG] Calling Firebase signInWithPopup (Google)...");
@@ -100,7 +135,7 @@ export default function SignupPage() {
       
       if (isMobile) {
         console.log("[AUTH DEBUG] Calling Firebase signInWithRedirect (GitHub)...");
-        // We do not set loading to false here because the page will navigate away.
+        // Do not set loading to false here, page will navigate away
         await signInWithRedirect(Auth, githubAuthProvider);
       } else {
         console.log("[AUTH DEBUG] Calling Firebase signInWithPopup (GitHub)...");
@@ -115,6 +150,18 @@ export default function SignupPage() {
       setIsGithubLoading(false);
     }
   };
+
+  if (isInitializing) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50">
+        <svg className="animate-spin h-10 w-10 text-blue-600 mb-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        <p className="text-gray-600 font-medium">Verifying authentication...</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col items-center justify-center min-h-screen bg-gray-50 p-4">
@@ -239,4 +286,3 @@ export default function SignupPage() {
     </div>
   );
 }
-
